@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title></title>
+		<style type="text/css">
+			.flex{
+				display: flex;
+			}
+			.flex-direction{
+				flex-direction: column;
+			}
+			.flex-sub{
+				flex:1;
+			}
+			.align-center{
+				align-items: center;
+			}
+			.justify-center{
+				justify-content: center;
+			}
+			.justify-between{
+				justify-content: space-between;
+			}
+			html,body{
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				background-color: #333;
+			}
+			.app{
+				display: flex;
+				height: inherit;
+			}
+			.video-player{
+				position: relative;
+				width: 420px;
+				height: 420px;
+				margin: 0 20px;
+				text-align: center;
+				background-color: #000;
+				box-shadow: 0 0 10px 0 rgba(0,0,0,.5);
+			}
+			video{
+				width: 100%;
+				height: 100%;
+				background-color: #000;
+			}
+			p{
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%,-50%);
+				color: #fff;
+				pointer-events: none;
+			}
+			button{
+				margin: 15px;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="app flex flex-direction align-center justify-center">
+			<div class="video-box flex justify-between">
+				<div class="video-player" id="player1" >
+					<video src="" controls></video>
+					<p id="p1"></p>
+					<button id="btn1">开始转码</button>
+				</div>
+				<div class="video-player" id="player2" >
+					<video src="" controls></video>
+					<p id="p2"></p>
+					<button id="btn2">开始转码(ES7)</button>
+				</div>
+				<div class="video-player" id="player3" >
+					<video src="" controls></video>
+					<p id="p3"></p>
+					<input id="btn3" type="file" name="开始转码(上传avi)" />
+				</div>
+			</div>
+		</div>
+		<script src="js/jquery.js"></script>
+		<script src="./js/lib/ffmpeg.min.js"></script>
+		<script type="text/javascript">
+			;(function(){
+				/**
+				 * ffmpeg作者github: https://github.com/ffmpegwasm/ffmpeg.wasm
+				 * cdn资源1：https://unpkg.com/browse/@ffmpeg/ffmpeg@0.9.4/dist/
+				 * cdn资源2：https://unpkg.com/browse/@ffmpeg/core@0.8.3/dist/
+				 * 
+				 * 本项目的ffmpeg.min.js每个版本所依赖的ffmpeg-core.js都不一样，
+				 * 如项目运行在内网环境，需要手动下载资源2里面的所有文件
+				 * 
+				 */
+				const url = './static/video-15s.avi';
+				const {
+					createFFmpeg,
+					fetchFile
+				} = FFmpeg;
+				const ffmpeg = createFFmpeg({
+					log: false,
+					corePath: './js/lib/ffmpeg-core.js', //如果是内网环境，释放此处，加载本地 ffmpeg-core库，否则加载的是资源2
+				});
+				$("#btn1").on('click',() => {
+					doTranscode();
+				})
+				$("#btn2").on('click',() => {
+					doTranscodeES7();
+				})
+				
+				function doTranscode(){
+					const player = $('#player1'),
+						  p = player.find('p');;
+					const timestamp = new Date().getTime();
+					const startTranscode = () => {
+						ffmpeg.setProgress(({ ratio }) => {
+						  if(ratio == 1){
+							setMessage(p,'');
+						  }else{
+							setMessage(p,'加载中...' + parseInt(ratio*100) + '%');
+						  }
+						});
+						setMessage(p,'开始转码');
+						fetchFile(url).then(function(file){
+							ffmpeg.FS('writeFile', 'input.avi', file);
+							ffmpeg.run('-i', 'input.avi', `output-${timestamp}.mp4`).then(function(){
+								setMessage(p,'转码完成');
+								const data = ffmpeg.FS('readFile', `output-${timestamp}.mp4`)
+								const _url = URL.createObjectURL(new Blob([data.buffer], {
+									type: 'video/mp4'
+								}));
+								player.find('video').attr('src',_url);
+							});
+						})
+					}
+					if(!ffmpeg.isLoaded()){
+						setMessage(p,'加载 ffmpeg-core.js');
+						ffmpeg.load().then(function(){
+							startTranscode();
+						});
+					}else{
+						startTranscode();
+					}
+				}
+				
+				async function doTranscodeES7(){
+					const player = $('#player2'),
+						  p = player.find('p');
+					const timestamp = new Date().getTime();
+					ffmpeg.setProgress(({ ratio }) => {
+					  if(ratio == 1){
+						setMessage(p,'');
+					  }else{
+						setMessage(p,'加载中...' + parseInt(ratio*100) + '%');
+					  }
+					});
+					if(!ffmpeg.isLoaded()){
+						setMessage(p,'加载 ffmpeg-core.js');
+						await ffmpeg.load();
+					}
+					setMessage(p,'开始转码');
+					ffmpeg.FS('writeFile', 'input.avi', await fetchFile(url));
+					await ffmpeg.run('-i', 'input.avi', `output-${timestamp}.mp4`);
+					setMessage(p,'转码完成');
+					const data = ffmpeg.FS('readFile', `output-${timestamp}.mp4`);
+					const _url = URL.createObjectURL(new Blob([data.buffer], {
+						type: 'video/mp4'
+					}));
+					player.find('video').attr('src',_url);
+				}
+				
+				const doTranscodeUpload = async ({
+					target: {
+						files
+					}
+				}) => {
+					const {
+						name
+					} = files[0];
+					const player = $('#player3'),
+						  p = player.find('p');
+					const timestamp = new Date().getTime();
+					ffmpeg.setProgress(({ ratio }) => {
+					  if(ratio == 1){
+						setMessage(p,'');
+					  }else{
+						setMessage(p,'加载中...' + parseInt(ratio*100) + '%');
+					  }
+					});
+					if(!ffmpeg.isLoaded()){
+						setMessage(p,'加载 ffmpeg-core.js');
+						await ffmpeg.load();
+					}
+					ffmpeg.FS('writeFile', name, await fetchFile(files[0]));
+					setMessage(p,'开始转码');
+					await ffmpeg.run('-i', name, `output-${timestamp}.mp4`);
+					setMessage(p,'转码完成');
+					const data = ffmpeg.FS('readFile', `output-${timestamp}.mp4`);
+					const _url = URL.createObjectURL(new Blob([data.buffer], {
+						type: 'video/mp4'
+					}));
+					player.find('video').attr('src',_url);
+				}
+				$('#btn3').on('change',doTranscodeUpload);
+				
+				function setMessage(p,t){
+					p.html(t);
+				}
+			})();
+		</script>
+	</body>
+</html>
